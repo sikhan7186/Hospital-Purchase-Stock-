@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="bn"><head><meta charset="utf-8"><title>Purchase Stock Register</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<!--
+FIRESTORE RULES (Firebase Console > Firestore > Rules). অ্যাডমিন ইমেইল বসানো আছে:
+rules_version = '2';
+service cloud.firestore { match /databases/{d}/documents {
+  function ok(){ return request.auth != null; }
+  function adm(){ return request.auth != null && request.auth.token.email in ['emily1995jh@gmail.com']; }
+  match /lists/{x}  { allow read: if ok(); allow write: if adm(); }
+  match /rows/{x}   { allow read, create, update: if ok(); allow delete: if adm(); }
+}}
+-->
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mu:#6b7280;--br:#d9dde3;--ac:#0f766e;--dg:#b91c1c}
+@media (prefers-color-scheme:dark){:root{--bg:#14171b;--card:#1e2328;--tx:#e8eaed;--mu:#9aa3ad;--br:#343b43;--ac:#2dd4bf;--dg:#f87171}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,"Noto Sans Bengali",sans-serif}
+header{padding:14px;text-align:center;background:var(--card);border-bottom:1px solid var(--br)}
+header h1{margin:0;font-size:17px}header p{margin:2px 0 0;color:var(--mu);font-size:12px}
+nav{display:flex;gap:8px;padding:10px;align-items:center;flex-wrap:wrap}nav .sp{flex:1}
+button,.btn{border:1px solid var(--br);background:var(--card);color:var(--tx);padding:8px 12px;border-radius:8px;font:inherit;cursor:pointer}
+button.on,.pri{background:var(--ac);color:#fff;border-color:var(--ac)}.dg{color:var(--dg)}
+main{padding:0 10px 20px}.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.wrap{overflow-x:auto;border:1px solid var(--br);border-radius:8px;background:var(--card)}
+table{border-collapse:collapse;min-width:1500px;width:100%}th,td{border-bottom:1px solid var(--br);padding:4px;white-space:nowrap}
+th{background:var(--bg);font-size:12px;text-align:left}
+td input,td select{width:100%;min-width:90px;padding:6px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);font:inherit}
+td.ro{font-weight:600;padding:4px 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--br);border-radius:8px;padding:10px}.card h3{margin:0 0 8px;font-size:14px}
+.add{display:flex;gap:6px}input.t{flex:1;padding:9px;border:1px solid var(--br);border-radius:6px;background:var(--bg);color:var(--tx);font:inherit;min-width:0}
+.item{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px dashed var(--br)}
+.item button{border:0;background:none;color:var(--dg);font-size:16px;padding:0 6px}
+.login{max-width:340px;margin:40px auto;padding:16px;display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--br);border-radius:10px}
+.sum{margin-top:10px;text-align:right;font-weight:700}.hide{display:none!important}#msg{padding:10px 12px;color:var(--dg);font-size:14px;font-weight:600}
+@media print{nav,.tools,.item button,.add{display:none}}
+</style></head><body>
+<header><h1>Advanced Dental &amp; Maxillofacial Hospital</h1><p>House#39, Road#02, Dhanmondi, Dhaka-1205</p><p><b>Purchase Department – Stock Register</b></p></header>
+<div id="msg"></div>
+<div id="login" class="login"><b>লগইন করুন</b><input class="t" id="em" type="email" placeholder="ইমেইল" autocomplete="username"><input class="t" id="pw" type="password" placeholder="পাসওয়ার্ড" autocomplete="current-password"><button class="pri" onclick="doLogin()">প্রবেশ করুন</button></div>
+<div id="app" class="hide">
+<nav><button id="t1" class="on" onclick="tab(1)">স্টক রেজিস্টার</button><button id="t2" class="hide" onclick="tab(2)">🔒 অ্যাডমিন প্যানেল</button><span class="sp"></span><button onclick="firebase.auth().signOut()">লগআউট</button></nav>
+<main>
+<section id="p1"><div class="tools"><button class="pri" onclick="addRow()">+ নতুন সারি</button><button onclick="csv()">CSV এক্সপোর্ট</button><button onclick="window.print()">প্রিন্ট</button></div>
+<div class="wrap"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div><div class="sum" id="sum"></div></section>
+<section id="p2" class="hide"><div id="adm" class="grid"></div></section>
+</main></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* ====== আপনার Firebase কনফিগ এখানে বসান ====== */
+var firebaseConfig={apiKey:"AIzaSyBxn9eC5vGk3mUk8Dk0Ro72T9D0LPPCHnk",authDomain:"love-birds-8698a.firebaseapp.com",projectId:"love-birds-8698a",storageBucket:"love-birds-8698a.firebasestorage.app",messagingSenderId:"80550108738",appId:"1:80550108738:web:b7754491c5417b546e97db"};
+/* অ্যাডমিন ইমেইল (Firestore Rules এও একই ইমেইল দিন) */
+var ADMIN_EMAILS=["emily1995jh@gmail.com"];
+/* ============================================ */
+var L=[["cat","Category"],["sub","Sub-Category"],["prod","Products Name"],["spc","SPC"],["open","Opening Stock"],["person","Person Name"],["desig","Designation"],["dept","Department"]];
+var C=[["sl","SL. No"],["cat","Catagory","s"],["sub","Sub-Catagory","s"],["prod","Products Name","s"],["spc","SPC","s"],["open","Opening Stock","o"],["rec","Received","n"],["out","Out","n"],["person","Person Name","s"],["desig","Designation","s"],["dept","Department","s"],["date","Date","d"],["close","Closing Stock"],["price","Unit Price","n"],["total","Total Value"]];
+var lists={},rows=[],isAdmin=false,db,unsubs=[],dl;
+L.forEach(function(x){lists[x[0]]=[]});
+function $(i){return document.getElementById(i)}
+function esc(v){return String(v==null?"":v).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;")}
+function num(v){var n=parseFloat(v);return isNaN(n)?0:n}
+function calc(r){r.close=num(r.open)+num(r.rec)-num(r.out);r.total=r.close*num(r.price)}
+function msg(t){$("msg").textContent=t||""}
+function fail(e){msg("সেভ হয়নি: "+(e&&e.code==="permission-denied"?"আপনার অনুমতি নেই":(e&&e.message)||"ত্রুটি"))}
+function tab(n){$("p1").classList.toggle("hide",n!=1);$("p2").classList.toggle("hide",n!=2);$("t1").className=n==1?"on":"";$("t2").className=n==2?"on":"";if(n==2)admin()}
+function addRow(){var n=Date.now();db.collection("rows").doc("r"+n).set({n:n,cat:"",sub:"",prod:"",spc:"",open:"",rec:"",out:"",person:"",desig:"",dept:"",date:new Date().toISOString().slice(0,10),price:"",close:0,total:0}).catch(fail)}
+function delRow(id){if(confirm("এই সারি মুছবেন?"))db.collection("rows").doc(id).delete().catch(fail)}
+function chg(i,k,v,save){var r=rows[i];r[k]=v;calc(r);$("c"+i).textContent=r.close;$("v"+i).textContent=r.total.toFixed(2);tot();
+ if(save){var d={};for(var x in r)if(x!="id")d[x]=r[x];db.collection("rows").doc(r.id).set(d).catch(fail)}}
+function tot(){var t=0;rows.forEach(function(r){t+=r.total||0});$("sum").textContent="সর্বমোট ভ্যালু: "+t.toFixed(2)}
+function busy(){var a=document.activeElement;return a&&$("tb").contains(a)}
+function render(){
+ $("th").innerHTML="<tr>"+C.map(function(c){return "<th>"+c[1]+"</th>"}).join("")+(isAdmin?"<th></th>":"")+"</tr>";
+ $("tb").innerHTML=rows.map(function(r,i){
+  var h="<tr><td class='ro'>"+(i+1)+"</td>";
+  C.slice(1).forEach(function(c){var k=c[0],t=c[2],a="oninput=\"chg("+i+",'"+k+"',this.value,0)\" onchange=\"chg("+i+",'"+k+"',this.value,1)\"";
+   if(k=="close")h+="<td class='ro' id='c"+i+"'>"+r.close+"</td>";
+   else if(k=="total")h+="<td class='ro' id='v"+i+"'>"+(r.total||0).toFixed(2)+"</td>";
+   else if(t=="s"){var o="<option value=''>--</option>"+lists[k].map(function(x){return "<option"+(x==r[k]?" selected":"")+">"+esc(x)+"</option>"}).join("");
+    if(r[k]&&lists[k].indexOf(r[k])<0)o+="<option selected>"+esc(r[k])+"</option>";
+    h+="<td><select onchange=\"chg("+i+",'"+k+"',this.value,1)\">"+o+"</select></td>"}
+   else if(t=="o")h+="<td><input type='number' list='dl_open' value='"+esc(r[k])+"' "+a+"></td>";
+   else if(t=="d")h+="<td><input type='date' value='"+esc(r[k])+"' onchange=\"chg("+i+",'"+k+"',this.value,1)\"></td>";
+   else h+="<td><input type='number' min='0' step='any' value='"+esc(r[k])+"' "+a+"></td>"});
+  return h+(isAdmin?"<td><button class='dg' onclick=\"delRow('"+r.id+"')\">✕</button></td>":"")+"</tr>"}).join("");
+ if(!dl){dl=document.createElement("datalist");dl.id="dl_open";document.body.appendChild(dl)}
+ dl.innerHTML=lists.open.map(function(x){return "<option value='"+esc(x)+"'>"}).join("");tot()}
+function admin(){if(!isAdmin)return;var h=L.map(function(x){var k=x[0];
+ return "<div class='card'><h3>"+x[1]+"</h3><div class='add'><input class='t' id='i_"+k+"' placeholder='নতুন যোগ করুন' onkeydown=\"if(event.key=='Enter')addI('"+k+"')\"><button class='pri' onclick=\"addI('"+k+"')\">Add</button></div>"+
+ lists[k].map(function(v,j){return "<div class='item'><span>"+esc(v)+"</span><button onclick=\"delI('"+k+"',"+j+")\">✕</button></div>"}).join("")+"</div>"}).join("");
+ $("adm").innerHTML=h}
+function saveL(){var d={};L.forEach(function(x){d[x[0]]=lists[x[0]]});return db.collection("lists").doc("main").set(d).catch(fail)}
+function addI(k){var v=$("i_"+k).value.trim();if(!v)return;if(lists[k].indexOf(v)<0)lists[k].push(v);saveL().then(admin)}
+function delI(k,j){lists[k].splice(j,1);saveL().then(admin)}
+function csv(){var q=function(v){return '"'+String(v==null?"":v).replace(/"/g,'""')+'"'};
+ var o=["Advanced Dental & Maxillofacial Hospital","House#39, Road#02, Dhanmondi, Dhaka-1205",C.map(function(c){return c[1]}).join(",")];
+ rows.forEach(function(r,i){o.push(C.map(function(c){return q(c[0]=="sl"?i+1:r[c[0]])}).join(","))});
+ var a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+o.join("\n")],{type:"text/csv"}));a.download="stock-register.csv";a.click()}
+function doLogin(){msg("");firebase.auth().signInWithEmailAndPassword($("em").value.trim(),$("pw").value).catch(function(){msg("ইমেইল বা পাসওয়ার্ড ভুল")})}
+$("pw").onkeydown=function(e){if(e.key=="Enter")doLogin()};
+function stop(){unsubs.forEach(function(u){u()});unsubs=[]}
+if(location.protocol==="file:"){msg("⚠ ফাইলটি সরাসরি ফোন/কম্পিউটার থেকে খুললে লগইন কাজ করে না। GitHub Pages-এ আপলোড করে তার https:// লিংক থেকে খুলুন।");$("login").classList.add("hide")}
+else if(typeof firebase==="undefined"){msg("⚠ Firebase লোড হয়নি — ইন্টারনেট চেক করে পেজ রিফ্রেশ করুন।");$("login").classList.add("hide")}
+else if(firebaseConfig.apiKey==="YOUR_API_KEY"){msg("⚠ firebaseConfig বসানো হয়নি — ফাইলের উপরের অংশে আপনার Firebase কনফিগ দিন।");$("login").classList.add("hide")}
+else{
+ firebase.initializeApp(firebaseConfig);db=firebase.firestore();
+ firebase.auth().onAuthStateChanged(function(u){
+  stop();
+  if(!u){$("app").classList.add("hide");$("login").classList.remove("hide");rows=[];return}
+  isAdmin=ADMIN_EMAILS.map(function(x){return x.toLowerCase()}).indexOf((u.email||"").toLowerCase())>=0;
+  $("login").classList.add("hide");$("app").classList.remove("hide");$("t2").classList.toggle("hide",!isAdmin);tab(1);msg("");
+  unsubs.push(db.collection("lists").doc("main").onSnapshot(function(s){var v=s.exists?s.data():{};L.forEach(function(x){lists[x[0]]=v[x[0]]||[]});if(!busy())render()},fail));
+  unsubs.push(db.collection("rows").orderBy("n").onSnapshot(function(s){rows=s.docs.map(function(x){var r=x.data();r.id=x.id;return r});if(!busy())render()},fail));
+ });
+}
+</script></body></html>
